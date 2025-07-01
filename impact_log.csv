@@ -1,0 +1,3 @@
+Timestamp,File,Material,Impact Level,Infill Density,Wall Count,Layer Height,Resistance Score,Impact Force,Verdict
+2025-07-01 14:03:37,gyroid_benchy.gcode,PETG,FEDER (FULL_STRIKE),80%,6,0.16,462.38,150,LIKELY TO SURVIVE
+2025-07-01 14:15:48,gyroid_benchy.gcode,PETG,SABER (HEAVY_CUT),80%,6,0.16,462.38,120,LIKELY TO SURVIVE
