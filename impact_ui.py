@@ -1,95 +1,10 @@
 import gradio as gr
+from impact_analyzer import analyze_gcode, calculate_resistance_score, MATERIALS, IMPACT_FORCES
 import re
 import os
 from datetime import datetime
 import csv
-
-# --- Core Analysis Logic (copied from impact_analyzer.py) ---
-
-# Material Properties Database
-MATERIALS = {
-    "PLA": {"tensile_strength": 50, "impact_strength": 5},
-    "PETG": {"tensile_strength": 45, "impact_strength": 8},
-    "ABS": {"tensile_strength": 40, "impact_strength": 10},
-    "TPU": {"tensile_strength": 35, "impact_strength": 30},
-}
-
-# Impact Force Presets
-IMPACT_FORCES = {
-    "LOW (DROP)": 10,
-    "MEDIUM (STRIKE)": 50,
-    "FEDER (LIGHT_TAP)": 30,
-    "FEDER (FULL_STRIKE)": 150,
-    "SABER (LIGHT_CUT)": 40,
-    "SABER (HEAVY_CUT)": 120,
-    "CRUSH (MODERATE)": 200,
-}
-
-def analyze_gcode(file_path):
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-    except (FileNotFoundError, TypeError):
-        return None
-
-    infill_density = 0.20
-    wall_count = 2
-    layer_height = 0.2
-    infill_pattern_name = "GRID"
-
-    infill_pattern = re.compile(r";\s*infill_percentage\s*=\s*(\d+\.?\d*)")
-    wall_pattern = re.compile(r";\s*wall_line_count\s*=\s*(\d+)")
-    layer_height_pattern = re.compile(r";\s*layer_height\s*=\s*(\d+\.?\d*)")
-    infill_type_pattern = re.compile(r";\s*infill_pattern\s*=\s*(\w+)")
-
-    infill_match = infill_pattern.search(content)
-    if infill_match:
-        infill_density = float(infill_match.group(1)) / 100.0
-
-    wall_match = wall_pattern.search(content)
-    if wall_match:
-        wall_count = int(wall_match.group(1))
-
-    layer_match = layer_height_pattern.search(content)
-    if layer_match:
-        layer_height = float(layer_match.group(1))
-
-    infill_type_match = infill_type_pattern.search(content)
-    if infill_type_match:
-        infill_pattern_name = infill_type_match.group(1).upper()
-
-    return {
-        "infill_density": infill_density,
-        "wall_count": wall_count,
-        "layer_height": layer_height,
-        "infill_pattern": infill_pattern_name
-    }
-
-def calculate_resistance_score(gcode_params, material_props):
-    if not gcode_params or not material_props:
-        return 0
-
-    infill_strength_multipliers = {
-        "GRID": 1.0, "LINES": 0.8, "TRIANGLES": 1.2,
-        "CUBIC": 1.1, "GYROID": 1.3, "DEFAULT": 1.0
-    }
-    infill_pattern = gcode_params.get("infill_pattern", "DEFAULT")
-    strength_multiplier = infill_strength_multipliers.get(infill_pattern, 1.0)
-
-    infill_weight = 0.4
-    wall_weight = 0.5
-    layer_adhesion_weight = 0.1
-
-    layer_adhesion_factor = 1 - (gcode_params['layer_height'] / 0.5)
-
-    structural_score = (
-        (gcode_params['infill_density'] * infill_weight) +
-        ((gcode_params['wall_count'] / 5.0) * wall_weight) +
-        (layer_adhesion_factor * layer_adhesion_weight)
-    )
-
-    resistance_score = structural_score * material_props['tensile_strength'] * material_props['impact_strength'] * strength_multiplier
-    return resistance_score
+import time
 
 # --- Steampunk Theming ---
 
@@ -102,6 +17,12 @@ steampunk_css = """
     --brass: #D4AF37;
     --dark-wood: #3A241D;
     --off-white: #F5F5DC;
+}
+
+#status_indicator .gradio-textbox {
+    border: none !important;
+    background: none !important;
+    box-shadow: none !important;
 }
 
 .gradio-container { 
@@ -150,9 +71,7 @@ h3 {
 
 .gr-input, .gr-dropdown, .gr-file-label {
     background-color: var(--off-white) !important;
-    color: var(--dark-wood) !important;
-    border: 1px solid var(--bronze) !important;
-}
+    color: var(--dark-wood) !importan
 
 """
 
@@ -181,6 +100,36 @@ def run_analysis(gcode_file, material, impact_level):
     else:
         verdict = "FRAGILE - LIKELY TO SHATTER"
         verdict_bg = "#5A2B2B"
+
+    # --- Log to CSV ---
+    log_file = os.path.join(os.path.dirname(__file__), 'impact_log.csv')
+    log_header = [
+        'Timestamp', 'File', 'Material', 'Impact Level', 'Infill Density', 
+        'Wall Count', 'Layer Height', 'Infill Pattern', 'Resistance Score', 'Impact Force', 'Verdict'
+    ]
+    log_data = {
+        'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'File': os.path.basename(gcode_file.name),
+        'Material': material,
+        'Impact Level': impact_level,
+        'Infill Density': f"{gcode_params['infill_density']:.0%}",
+        'Wall Count': gcode_params['wall_count'],
+        'Layer Height': gcode_params['layer_height'],
+        'Infill Pattern': gcode_params['infill_pattern'],
+        'Resistance Score': f"{resistance_score:.2f}",
+        'Impact Force': impact_force,
+        'Verdict': verdict.split(' - ')[0]
+    }
+
+    file_exists = os.path.isfile(log_file)
+    try:
+        with open(log_file, 'a', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=log_header)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(log_data)
+    except IOError as e:
+        print(f"Error writing to log file: {e}")
 
     # --- Create Steampunk HTML output ---
     params_html = f"""
@@ -213,14 +162,27 @@ def run_analysis(gcode_file, material, impact_level):
 
     return params_html, results_html, verdict_html
 
+def update_status():
+    """Creates a blinking effect for the status indicator."""
+    on_char = "<h3 style='color:#2E7D32; text-align: right; font-family: \"IM Fell English SC\", serif;'>● SYSTEM OPERATIONAL</h3>"
+    off_char = "<h3 style='color:#555; text-align: right; font-family: \"IM Fell English SC\", serif;'>○ SYSTEM STANDBY</h3>"
+    while True:
+        # Blink off for a short period every few seconds
+        yield off_char if int(time.time()) % 10 < 2 else on_char
+        time.sleep(1)
+
 # --- UI Layout ---
 with gr.Blocks(css=steampunk_css) as iface:
-    gr.Markdown(
-        """
-        # ⚙️ The Aetheric Impact Prognosticator ⚙️
-        Present your G-code schematics, select the material composition and the anticipated kinetic force to receive a calculated prognosis of structural integrity.
-        """
-    )
+    with gr.Row():
+        with gr.Column(scale=3):
+            gr.Markdown(
+                """
+                # ⚙️ The Aetheric Impact Prognosticator ⚙️
+                Present your G-code schematics, select the material composition and the anticipated kinetic force to receive a calculated prognosis of structural integrity.
+                """
+            )
+        with gr.Column(scale=1):
+            status_indicator = gr.HTML()
 
     with gr.Row():
         with gr.Column(scale=1):
@@ -239,6 +201,12 @@ with gr.Blocks(css=steampunk_css) as iface:
     gr.Markdown("**Disclaimer:** This is a simplified model and not a substitute for real-world testing or professional engineering analysis (FEA).")
 
     # --- Event Handling ---
+    iface.load(
+        fn=update_status,
+        inputs=None,
+        outputs=[status_indicator]
+    )
+
     analyze_button.click(
         fn=run_analysis,
         inputs=[gcode_uploader, material_dropdown, impact_dropdown],
