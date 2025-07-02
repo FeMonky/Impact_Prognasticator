@@ -113,3 +113,22 @@ The Gradio-based GUI (`impact_ui.py`) provides an interactive web interface for 
 ## Disclaimer
 
 This is a simplified heuristic model and is **not** a substitute for real-world physical testing or professional Finite Element Analysis (FEA). The results are intended to be used for comparative purposes (e.g., is this print likely to be stronger than another?) and not as a guarantee of performance.
+
+## Data Sources
+
+The values used in the `MATERIALS` and `IMPACT_FORCES` databases are simplified, illustrative estimates intended for this model. They are based on generally accepted ranges found in publicly available material datasheets and physics discussions.
+
+### Material Properties
+
+The tensile strength (MPa) and impact strength (kJ/m²) values are based on typical data ranges found in filament manufacturer datasheets and material science resources.
+
+*   **General Filament Properties:** [Ultimaker - Material Properties](https://ultimaker.com/materials/materials-library)
+*   **PLA, PETG, ABS Comparison:** [Instructables - PLA vs ABS vs PETG](https://www.instructables.com/PLA-vs-ABS-vs-PETG/)
+*   **TPU Properties:** [MatterHackers - TPU](https://www.matterhackers.com/store/c/3d-printer-filament/tpu-thermoplastic-polyurethane)
+
+### Impact Forces
+
+The impact force presets (Joules) are estimates for the simulation. The HEMA-related values are inspired by discussions and articles regarding the physics of sword impacts.
+
+*   **Sword Impact Energy:** [Thearma.org - The Measure of Blows](http://thearma.org/essays/measureofblows.htm)
+*   **General Impact Physics:** [Wikipedia - Impact Force](https://en.wikipedia.org/wiki/Impact_force)
